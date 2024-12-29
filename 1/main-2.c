@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -26,18 +27,33 @@ float cost(float w) {
     return result /= train_count;
 }
 
+float dcost(float w) {
+    float result = 0.0f;
+    size_t n = train_count;
+    for (size_t i = 0; i < n; ++i) {
+        float x = train[i][0];
+        float y = train[i][1];
+        result += 2 * (x * w - y) * x;
+    }
+    return result /= n;
+}
+
 int main() {
     srand(69);
     float w = get_float() * 10.0f;
 
-    float eps = 1e-3;
-    float rate = 1e-3;
+    float rate = 1e-2;
 
-    for(int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 6; i++) {
+#if 1
+        float eps = 1e-3;
         float c = cost(w);
         float dw = (cost(w + eps) - c) / eps;
+#else
+        float dw = dcost(w);
+#endif
         w -= rate * dw;
-        printf("cost = %f, w = %f\n", c, w);
+        printf("cost = %f, w = %f\n", cost(w), w);
     }
     printf("w = %f\n", w);
 

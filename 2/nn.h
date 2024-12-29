@@ -88,6 +88,34 @@ Mat mat_alloc(size_t rows, size_t cols) {
     return m;
 }
 
+void mat_rand(Mat m, float low, float high) {
+    for (size_t i = 0; i < m.rows; ++i) {
+        for (size_t j = 0; j < m.cols; ++j) {
+            MAT_AT(m, i, j) = float_rand() * (high-low) + low;
+        }
+    }
+}
+
+void mat_fill(Mat m, float v) {
+    for (size_t i = 0; i < m.rows; ++i) {
+        for (size_t j = 0; j < m.cols; ++j) {
+            MAT_AT(m, i, j) = v;
+        }
+    }
+}
+
+void mat_print(Mat m, const char *name, size_t padding){
+    printf("%*s%s = [\n", (int)padding, "", name);
+    for (size_t i = 0; i < m.rows; ++i) {
+        printf("%*s    ", (int)padding, "");
+        for (size_t j = 0; j < m.cols; ++j) {
+            printf("%f ", MAT_AT(m, i, j));
+        }
+        printf("\n");
+    }
+    printf("%*s]\n", (int) padding, "");
+}
+
 void mat_dot(Mat dst, Mat a, Mat b) {
     NN_ASSERT(a.cols == b.rows);
     size_t n = a.cols;
@@ -138,34 +166,6 @@ void mat_sig(Mat m) {
     for (size_t i = 0; i < m.rows; ++i) {
         for (size_t j = 0; j < m.cols; ++j) {
             MAT_AT(m, i, j) = sigmoid(MAT_AT(m, i, j));
-        }
-    }
-}
-
-void mat_print(Mat m, const char *name, size_t padding){
-    printf("%*s%s = [\n", (int)padding, "", name);
-    for (size_t i = 0; i < m.rows; ++i) {
-        printf("%*s    ", (int)padding, "");
-        for (size_t j = 0; j < m.cols; ++j) {
-            printf("%f ", MAT_AT(m, i, j));
-        }
-        printf("\n");
-    }
-    printf("%*s]\n", (int) padding, "");
-}
-
-void mat_rand(Mat m, float low, float high) {
-    for (size_t i = 0; i < m.rows; ++i) {
-        for (size_t j = 0; j < m.cols; ++j) {
-            MAT_AT(m, i, j) = float_rand() * (high-low) + low;
-        }
-    }
-}
-
-void mat_fill(Mat m, float v) {
-    for (size_t i = 0; i < m.rows; ++i) {
-        for (size_t j = 0; j < m.cols; ++j) {
-            MAT_AT(m, i, j) = v;
         }
     }
 }
