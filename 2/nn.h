@@ -30,7 +30,7 @@ typedef struct {
 } Mat;
 
 #define MAT_AT(m, i, j) (m).es[(i)*(m).stride + (j)]
-#define ARRAY_LEN(xs) sizeof(xs) / sizeof(xs[0])
+#define ARRAY_LEN(xs) sizeof((xs)) / sizeof((xs)[0])
 
 // Matrixes
 Mat mat_alloc(size_t rows, size_t cols); // memory management
@@ -56,11 +56,13 @@ typedef struct {
 #define NN_OUTPUT(nn) (nn).as[(nn).count]
 
 NN nn_alloc(size_t *arch, size_t arch_count);
+void nn_zero(NN nn);
 void nn_rand(NN nn, float low, float high);
 void nn_print(NN nn, const char *name);
 void nn_forward(NN nn);
 float nn_cost(NN nn, Mat ti, Mat to);
-void nn_finite_diff(NN n, NN g, float eps, Mat ti, Mat to);
+void nn_finite_diff(NN nn, NN g, float eps, Mat ti, Mat to);
+void nn_backprop(NN nn, NN g, Mat ti, Mat to);
 void nn_learn(NN nn, NN g, float rate);
 
 #define NN_PRINT(nn) nn_print(nn, #nn)
@@ -83,7 +85,7 @@ Mat mat_alloc(size_t rows, size_t cols) {
     m.rows = rows;
     m.cols = cols;
     m.stride = cols;
-    m.es = malloc(sizeof(*m.es) * rows * cols);
+    m.es = NN_MALLOC(sizeof(*m.es) * rows * cols);
     assert(m.es != NULL);
     return m;
 }
@@ -104,6 +106,15 @@ void mat_fill(Mat m, float v) {
     }
 }
 
+void nn_zero(NN nn) {
+    for (size_t i = 0; i < nn.count; ++i) {
+        mat_fill(nn.ws[i], 0);
+        mat_fill(nn.bs[i], 0);
+        mat_fill(nn.as[i], 0);
+    }
+    mat_fill(nn.as[nn.count], 0);
+}
+
 void mat_print(Mat m, const char *name, size_t padding){
     printf("%*s%s = [\n", (int)padding, "", name);
     for (size_t i = 0; i < m.rows; ++i) {
@@ -117,8 +128,8 @@ void mat_print(Mat m, const char *name, size_t padding){
 }
 
 void mat_dot(Mat dst, Mat a, Mat b) {
-    NN_ASSERT(a.cols == b.rows);
     size_t n = a.cols;
+    NN_ASSERT(n == b.rows);
     NN_ASSERT(dst.rows == a.rows);
     NN_ASSERT(dst.cols == b.cols);
 
@@ -182,7 +193,7 @@ NN nn_alloc(size_t *arch, size_t arch_count) {
     nn.bs = NN_MALLOC(sizeof(*nn.bs) * nn.count);
     NN_ASSERT(nn.bs != NULL);
 
-    nn.as = NN_MALLOC(sizeof(*nn.as) * nn.count);
+    nn.as = NN_MALLOC(sizeof(*nn.as) * (nn.count + 1));
     NN_ASSERT(nn.as != NULL);
 
     nn.as[0] = mat_alloc(1, arch[0]);
@@ -245,6 +256,10 @@ float nn_cost(NN nn, Mat ti, Mat to)  {
     return c/n;
 }
 
+// save the new gradient matrixes into g,
+//      by increasing the inputs with eps
+//      from that deducting the original cost result
+//      and dividing the difference with eps
 void nn_finite_diff(NN nn, NN g, float eps, Mat ti, Mat to) {
     float saved;
     float c = nn_cost(nn, ti, to);
@@ -270,8 +285,71 @@ void nn_finite_diff(NN nn, NN g, float eps, Mat ti, Mat to) {
     }
 }
 
-void nn_learn(NN nn, NN g, float rate) {
 
+void nn_backprop(NN nn, NN g, Mat ti, Mat to) {
+    // each row of the ti is the input, and each row of the to is the output
+    NN_ASSERT(ti.rows == to.rows);
+    NN_ASSERT(NN_OUTPUT(nn).cols == to.cols);
+    size_t n = ti.rows;
+
+    nn_zero(g);
+
+    // i - current samples
+    // l - current layer
+    // j - current activation
+    // k - previous activation
+
+    for (size_t i = 0; i < n; ++i) {
+        // samples
+        // copy the an input row into our nn input matrix
+        mat_copy(NN_INPUT(nn), mat_row(ti, i));
+        nn_forward(nn);
+
+        for (size_t j = 0; j <= nn.count; ++j) {
+            mat_fill(g.as[j], 0);
+        }
+
+        for (size_t j = 0; j < to.cols; ++j) {
+            MAT_AT(NN_OUTPUT(g), 0, j) = MAT_AT(NN_OUTPUT(nn), 0, j) - MAT_AT(to, i, j);
+        }
+
+        for (size_t l = nn.count; l > 0; --l) {
+            // layers
+            for (size_t j = 0; j < nn.as[l].cols; ++j) {
+                // current activation we compute biases
+                float a = MAT_AT(nn.as[l], 0, j);
+                float da = MAT_AT(g.as[l], 0, j);
+                MAT_AT(g.bs[l-1], 0, j) += 2 * da * a * (1-a);
+
+                for (size_t k = 0; k < nn.as[l-1].cols; ++k) {
+                    // previous activations
+                    // j - weight matrix col
+                    // k - weight matrix row
+                    float pa = MAT_AT(nn.as[l-1], 0, k);
+                    float w = MAT_AT(nn.ws[l-1], k, j);
+                    MAT_AT(g.ws[l-1], k, j) += 2 * da * a * (1-a) * pa;
+                    MAT_AT(g.as[l-1], 0, k) += 2 * da * a * (1-a) * w;
+                }
+            }
+        }
+    }
+
+    for (size_t i = 0; i < g.count; ++i) {
+        for (size_t j = 0; j < g.ws[i].rows; ++j) {
+            for (size_t k = 0; k < g.ws[i].cols; ++k) {
+                MAT_AT(g.ws[i], j, k) /= n;
+            }
+        }
+        for (size_t j = 0; j < g.bs[i].rows; ++j) {
+            for (size_t k = 0; k < g.bs[i].cols; ++k) {
+                MAT_AT(g.bs[i], j, k) /= n;
+            }
+        }
+    }
+}
+
+// modify the w and b by the gradient matrix w and b multiplied with the eps
+void nn_learn(NN nn, NN g, float rate) {
     for (size_t i = 0; i < nn.count; ++i) {
         for (size_t j = 0; j < nn.ws[i].rows; ++j) {
             for (size_t k = 0; k < nn.ws[i].cols; ++k) {

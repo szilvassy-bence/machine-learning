@@ -86,7 +86,6 @@ void gcost(float w1, float w2, float b, float *dw1, float *dw2, float *db) {
     *dw1 /= n;
     *dw2 /= n;
     *db /= n;
-
 }
 
 void xor() {
@@ -100,20 +99,18 @@ void xor() {
 
 
 int main() {
-    srand(time(0));
+    srand(69);
     float rate = 1e-1;
 
     float w1 = rand_float();
     float w2 = rand_float();
     float b = rand_float();
 
-    for (size_t i = 0; i < 10 * 100; ++i) {
-        /* float c = cost(w1, w2, b); */
-        /* printf("%f\n", c); */
-
+    for (size_t i = 0; i < 5000; ++i) {
+        float c = cost(w1, w2, b);
+        printf("c = %f, w1 = %f, w2 = %f, b = %f\n", c, w1, w2, b);
         float dw1, dw2, db;
-
-#if 0
+#if 1
         float eps = 1e-3;
         dcost(eps, w1, w2, b, &dw1, &dw2, &db);
 #else
